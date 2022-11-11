@@ -7,8 +7,6 @@ const heap = std.heap;
 const debug = std.debug;
 const stdc = std.c;
 
-const ArrayList = std.ArrayList;
-
 var gpa = heap.GeneralPurposeAllocator(.{}){};
 var global_allocator = gpa.allocator();
 
