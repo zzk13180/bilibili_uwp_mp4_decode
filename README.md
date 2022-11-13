@@ -1,5 +1,8 @@
+# 解密哔哩哔哩UWP客户端下载的视频
+
 ## 运行
 
+- git submodule update --init
 - zig build
 - zig build run
 - zig build -h

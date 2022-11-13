@@ -15,33 +15,15 @@ pub fn build(b: *std.build.Builder) void {
     exe.setTarget(target);
     exe.setBuildMode(mode);
 
-    exe.linkLibC();
-    exe.install();
     const cflags = [_][]const u8{"-Wall"};
     exe.addIncludePath(concatAbsolPath("/nativefiledialog/src/include"));
     exe.addCSourceFile(concatAbsolPath("/nativefiledialog/src/nfd_common.c"), &cflags);
-    if (exe.target.isDarwin()) {
-        exe.addCSourceFile(concatAbsolPath("/nativefiledialog/src/nfd_cocoa.m"), &cflags);
-    } else if (exe.target.isWindows()) {
-        exe.addCSourceFile(concatAbsolPath("/nativefiledialog/src/nfd_win.cpp"), &cflags);
-    } else {
-        exe.addCSourceFile(concatAbsolPath("/nativefiledialog/src/nfd_gtk.c"), &cflags);
-    }
+    exe.addCSourceFile(concatAbsolPath("/nativefiledialog/src/nfd_win.cpp"), &cflags);
 
     exe.linkLibC();
-    if (exe.target.isDarwin()) {
-        exe.linkFramework("AppKit");
-    } else if (exe.target.isWindows()) {
-        exe.linkSystemLibrary("shell32");
-        exe.linkSystemLibrary("ole32");
-        exe.linkSystemLibrary("uuid");
-    } else {
-        exe.linkSystemLibrary("atk-1.0");
-        exe.linkSystemLibrary("gdk-3");
-        exe.linkSystemLibrary("gtk-3");
-        exe.linkSystemLibrary("glib-2.0");
-        exe.linkSystemLibrary("gobject-2.0");
-    }
+    exe.linkSystemLibrary("shell32");
+    exe.linkSystemLibrary("ole32");
+    exe.linkSystemLibrary("uuid");
 
     exe.install();
 
