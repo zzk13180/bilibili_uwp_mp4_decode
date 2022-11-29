@@ -1,85 +1,92 @@
 const std = @import("std");
-const Logging = @import("Logging.zig");
 const os = std.os;
 const fs = std.fs;
 const io = std.io;
 const mem = std.mem;
 const heap = std.heap;
-const time = std.time;
 const math = std.math;
 const stdc = std.c;
 
-const ArrayList = std.ArrayList;
-
-var gpa = heap.GeneralPurposeAllocator(.{}){};
-var global_allocator = gpa.allocator();
-
-const LOG_TAG: [:0]const u8 = "";
-var logging: Logging = undefined;
+pub const log_level: std.log.Level = .info;
+pub fn log(
+    comptime level: std.log.Level,
+    comptime scope: @TypeOf(.EnumLiteral),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    _ = scope;
+    const prefix = "[" ++ comptime level.asText() ++ "] ";
+    const stderr = io.getStdErr().writer();
+    nosuspend stderr.print(prefix ++ format ++ "\n", args) catch return;
+}
+const info = std.log.info;
+const warn = std.log.warn;
 
 pub fn main() !void {
-    defer _ = gpa.deinit();
-    defer _ = logging.deinit();
+    var arena = heap.ArenaAllocator.init(heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
-    logging = Logging.init(global_allocator, LOG_TAG);
-    logging.log("{s}", .{"Please select a file to decode"});
-
+    info("{s}", .{"Please select a file"});
     const open_path = try openFileDialog("mp4", null);
     if (open_path) |path| {
         defer stdc.free(@intToPtr(*anyopaque, @ptrToInt(path.ptr)));
-        if (doRewrite(path)) {
-            logging.log("\n{s}\n", .{"Success"});
+        if (doRewrite(allocator, path)) {
+            info("{s}", .{"Success"});
         } else |err| switch (err) {
-            error.FileNotFound => logging.log("\n{s}\n", .{"File Not Found"}),
-            error.BadPathName => logging.log("\n{s}\n", .{"Bad Path Name"}),
-            error.AccessDenied => logging.log("\n{s}\n", .{"Access Denied"}),
-            error.NotMatching => logging.log("\n{s}\n", .{"Not required decode. Nothing was done."}),
-            else => logging.log("\n{!}\n", .{err}),
+            error.FileNotFound => warn("{s}", .{"File Not Found"}),
+            error.BadPathName => warn("{s}", .{"Bad Path Name"}),
+            error.AccessDenied => warn("{s}", .{"Access Denied"}),
+            error.NotMatching => warn("{s}", .{"Not required decode. Nothing was done."}),
+            else => warn("{!}", .{err}),
         }
     } else {
-        logging.log("\n{s}\n", .{"No file selected"});
+        warn("{s}", .{"No file selected"});
     }
 
-    logging.log("{s}", .{"End"});
-    logging.log("{s}", .{"Thanks for using this tool"});
-    time.sleep(1 * time.ns_per_s);
-    logging.log("{s}", .{"Bye"});
-    time.sleep(1 * time.ns_per_s);
+    info("{s}", .{
+        \\
+        \\Thanks for using this tool.
+        \\Bye.
+    });
 }
 
-fn doRewrite(path: []const u8) !void {
-    logging.log("selected : {s}", .{path});
-    const file = try fs.cwd().openFile(path, .{ .mode = .read_write });
+fn doRewrite(allocator: mem.Allocator, path: []const u8) !void {
+    const file = fs.cwd().openFile(path, .{ .mode = .read_write }) catch |err| {
+        warn("Unable to open file: {s}\n", .{@errorName(err)});
+        return err;
+    };
     defer file.close();
-    const file_size = try file.getEndPos();
 
     var buf3: [3]u8 = undefined;
     _ = try file.read(&buf3);
     for (buf3) |byte| if (byte != 0xff) return error.NotMatching;
-    logging.log("Please wait ... ", .{});
-    logging.log("File size : {d}", .{file_size});
+    info("{s}End", .{
+        \\ Please wait ...
+        \\ Do not close the program.
+    });
 
-    var file_buf = ArrayList(u8).init(global_allocator);
-    try file_buf.ensureTotalCapacity(@min(math.maxInt(u23), file_size));
+    var file_buf = std.ArrayList(u8).init(allocator);
+    defer file_buf.deinit();
+
+    const max_size = 4096 * 100;
+    const file_size = try file.getEndPos();
+
+    try file_buf.ensureTotalCapacity(@min(max_size, file_size));
     file_buf.expandToCapacity();
-    _ = try file.read(file_buf.items[0..]);
 
+    var written: usize = 0;
     try file.seekTo(0);
-    var written = try file.write(file_buf.items);
-
     while (written < file_size - 3) {
-        logging.log("Already written : {d}", .{written});
-        try file.seekTo(written + 3);
-        file_buf.deinit();
-        file_buf = ArrayList(u8).init(global_allocator);
-        try file_buf.ensureTotalCapacity(@min(math.maxInt(u23), file_size - written - 3));
+        try file_buf.ensureTotalCapacity(@min(max_size, file_size - written - 3));
         file_buf.expandToCapacity();
+
+        try file.seekTo(written + 3);
         _ = try file.read(file_buf.items[0..]);
+
         try file.seekTo(written);
         written += try file.write(file_buf.items);
     }
-
-    file_buf.deinit();
     try file.setEndPos(file_size - 3);
 }
 
@@ -97,7 +104,7 @@ extern fn NFD_OpenDialog(filterList: [*c]const char_t, defaultPath: [*c]const ch
 extern fn NFD_GetError() [*c]const u8;
 fn openFileError() Error {
     if (NFD_GetError()) |ptr| {
-        logging.log("{s}\n", .{mem.span(ptr)});
+        info("{s}", .{mem.span(ptr)});
     }
     return error.NfdError;
 }
