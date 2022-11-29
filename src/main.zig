@@ -15,7 +15,7 @@ pub fn log(
     args: anytype,
 ) void {
     _ = scope;
-    const prefix = "[" ++ comptime level.asText() ++ "] ";
+    const prefix = "\n[" ++ comptime level.asText() ++ "] ";
     const stderr = io.getStdErr().writer();
     nosuspend stderr.print(prefix ++ format ++ "\n", args) catch return;
 }
@@ -45,10 +45,14 @@ pub fn main() !void {
     }
 
     info("{s}", .{
-        \\
         \\Thanks for using this tool.
-        \\Bye.
+        \\Press Enter to exit.
     });
+
+    const stdin = io.getStdIn();
+    var line_buf: [20]u8 = undefined;
+    const amt = try stdin.read(&line_buf);
+    _ = amt;
 }
 
 fn doRewrite(allocator: mem.Allocator, path: []const u8) !void {
@@ -61,10 +65,7 @@ fn doRewrite(allocator: mem.Allocator, path: []const u8) !void {
     var buf3: [3]u8 = undefined;
     _ = try file.read(&buf3);
     for (buf3) |byte| if (byte != 0xff) return error.NotMatching;
-    info("{s}End", .{
-        \\ Please wait ...
-        \\ Do not close the program.
-    });
+    info("Please wait ...", .{});
 
     var file_buf = std.ArrayList(u8).init(allocator);
     defer file_buf.deinit();
@@ -86,6 +87,9 @@ fn doRewrite(allocator: mem.Allocator, path: []const u8) !void {
 
         try file.seekTo(written);
         written += try file.write(file_buf.items);
+        if (written % 0x2710 == 0) {
+            info("Progress: {d} / {d}", .{ written, file_size });
+        }
     }
     try file.setEndPos(file_size - 3);
 }
