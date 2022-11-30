@@ -73,9 +73,6 @@ fn doRewrite(allocator: mem.Allocator, path: []const u8) !void {
     const max_size = 4096 * 100;
     const file_size = try file.getEndPos();
 
-    try file_buf.ensureTotalCapacity(@min(max_size, file_size));
-    file_buf.expandToCapacity();
-
     var written: usize = 0;
     try file.seekTo(0);
     while (written < file_size - 3) {
